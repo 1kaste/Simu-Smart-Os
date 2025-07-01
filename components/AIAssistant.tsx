@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import { GoogleGenAI, Chat } from "@google/genai";
 import { marked } from 'marked';
@@ -39,11 +40,19 @@ const AIAssistant: React.FC = () => {
         
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const productList = products.map(p => `- ${p.name} (Category: ${p.category}, Price: Ksh ${p.price})`).join('\n');
+            const productList = products.map(p => {
+                const colorInfo = p.colors && p.colors.length > 0
+                    ? `Available colors are: ${p.colors.filter(c => c.stock > 0).map(c => c.name).join(', ')}.`
+                    : "This product doesn't have specific color options.";
+                const specsInfo = p.specs ? `It has the following features: ${p.specs.replace(/###/g, '').replace(/\n/g, ' ')}` : '';
+                return `- ${p.name} (Category: ${p.category}, Price: Ksh ${p.price}). ${colorInfo} ${specsInfo}`;
+            }).join('\n');
+            
             const systemInstruction = `You are a friendly and helpful shopping assistant for an online store called "${settings.shopName}".
-Your goal is to help users find products and answer their questions.
+Your goal is to help users find products and answer their questions based on the provided list.
 Be concise and conversational.
-Use the following product list to answer questions about inventory. Do not invent products.
+NEVER mention stock numbers or quantity. Only mention if a color is available or out of stock.
+Use the following product list to answer questions. Do not invent products or features.
 Product List:
 ${productList}
 
@@ -120,7 +129,7 @@ If you can't answer a question, politely say so and suggest they contact support
                             {messages.map((msg, index) => (
                                 <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div
-                                        className={`max-w-xs lg:max-w-sm rounded-lg px-3 py-2 text-sm ${
+                                        className={`prose prose-sm dark:prose-invert max-w-xs lg:max-w-sm rounded-lg px-3 py-2 ${
                                             msg.role === 'user'
                                                 ? 'bg-accent-teal text-white'
                                                 : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
