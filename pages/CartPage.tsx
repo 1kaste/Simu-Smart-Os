@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../src/contexts/CartContext';
@@ -26,22 +27,23 @@ const CartPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-4">
             {cartItems.map(item => (
-              <Card key={item.product.id} className="flex items-center p-4">
+              <Card key={`${item.product.id}-${item.color || ''}`} className="flex items-center p-4">
                 <img src={item.product.imageUrl} alt={item.product.name} className="w-24 h-24 object-cover rounded-md" />
                 <div className="flex-grow ml-4">
                   <h3 className="font-semibold text-lg text-primary-dark dark:text-white">{item.product.name}</h3>
+                  {item.color && <p className="text-sm text-gray-500 dark:text-gray-400">{item.color}</p>}
                   <p className="text-sm text-gray-500 dark:text-gray-400">Ksh {item.product.price.toLocaleString()}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="icon" variant="outline" onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>-</Button>
+                  <Button size="icon" variant="outline" onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.color)}>-</Button>
                   <span className="w-10 text-center font-semibold text-lg">{item.quantity}</span>
-                  <Button size="icon" variant="outline" onClick={() => updateQuantity(item.product.id, item.quantity + 1)}>+</Button>
+                  <Button size="icon" variant="outline" onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.color)}>+</Button>
                 </div>
                 <div className="ml-6">
                   <p className="font-bold text-lg text-primary-dark dark:text-white">Ksh {(item.product.price * item.quantity).toLocaleString()}</p>
                 </div>
                  <div className="ml-6">
-                  <Button size="icon" variant="ghost" onClick={() => removeFromCart(item.product.id)}>
+                  <Button size="icon" variant="ghost" onClick={() => removeFromCart(item.product.id, item.color)}>
                     <Icons.Trash2 className="h-5 w-5 text-red-500" />
                   </Button>
                 </div>
