@@ -1,12 +1,14 @@
 
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../src/contexts/CartContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { useData } from '../src/contexts/DataContext';
 import { Order, PaymentMethod } from '../data/mock-data';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../components/ui/Card';
+import { useAuth } from '../src/contexts/AuthContext';
+import { Icons } from '../components/icons';
 
 const VisaForm = () => {
     return (
@@ -53,19 +55,63 @@ const MobileMoneyForm: React.FC<{ method: PaymentMethod, value: string, onChange
 const CheckoutPage: React.FC = () => {
   const { cartItems, totalPrice, clearCart, cartCount } = useCart();
   const { settings, addOrder } = useData();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+  
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(settings.paymentMethods[0]?.id || null);
   const [paymentMessage, setPaymentMessage] = useState('');
+  
+  // Form state
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  
+  useEffect(() => {
+    if (user) {
+        const nameParts = user.name.split(' ');
+        setFirstName(nameParts[0] || '');
+        setLastName(nameParts.slice(1).join(' ') || '');
+        setEmail(user.email);
+    }
+  }, [user]);
 
-  if (cartCount === 0 && !sessionStorage.getItem('order_placed')) {
-    navigate('/cart');
-    return null;
-  }
+  useEffect(() => {
+    if (cartCount === 0 && !sessionStorage.getItem('order_placed')) {
+      navigate('/cart');
+    }
+  }, [cartCount, navigate]);
+
+
+  const handleGuestCheckout = () => {
+    if (!settings.whatsappNumber || cartItems.length === 0) {
+        alert("Could not create order. WhatsApp number is not set or cart is empty.");
+        return;
+    }
+
+    const productLines = cartItems.map(item => 
+        `- ${item.product.name}${item.color ? ` (${item.color})` : ''} (Qty: ${item.quantity}) - Ksh ${(item.product.price * item.quantity).toLocaleString()}`
+    ).join('\n');
+
+    const message = `Hello ${settings.shopName}!\n\nI would like to place an order for the following items:\n\n${productLines}\n\n*Total: Ksh ${totalPrice.toLocaleString()}*\n\nPlease advise on payment and delivery. Thank you.`;
+    
+    const phoneNumber = settings.whatsappNumber.replace(/\D/g, '');
+    
+    const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+    
+    window.open(whatsappLink, '_blank');
+    
+    clearCart();
+    alert("You've been redirected to WhatsApp to complete your order. Your cart has now been cleared.");
+    navigate('/');
+  };
+
 
   const handlePlaceOrder = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const customerName = `${formData.get('firstName')} ${formData.get('lastName')}`;
+    const customerName = `${firstName} ${lastName}`;
     const selectedMethod = settings.paymentMethods.find(p => p.id === selectedPaymentMethodId);
     
     let detailsForOrder = '';
@@ -84,8 +130,9 @@ const CheckoutPage: React.FC = () => {
         status: 'Pending',
         total: totalPrice,
         itemCount: cartCount,
-        customerAddress: `${formData.get('address')}, ${formData.get('city')}`,
-        customerPhone: formData.get('phone') as string,
+        items: cartItems,
+        customerAddress: `${address}, ${city}`,
+        customerPhone: phone,
         paymentMethod: selectedMethod?.name || 'Unknown',
         paymentStatus: selectedMethod?.name === 'Payment on Delivery' ? 'Unpaid' : 'Paid',
         paymentDetails: detailsForOrder
@@ -96,6 +143,49 @@ const CheckoutPage: React.FC = () => {
     sessionStorage.setItem('order_placed', 'true'); // Avoid redirect loop
     navigate('/order-confirmation', { state: { orderNumber: newOrder.id }});
   };
+
+  if (cartCount === 0) {
+    return null; // Don't render if cart is empty, effect will redirect
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="container mx-auto px-4 py-12 sm:px-6 lg:px-8 max-w-2xl">
+          <Card>
+              <CardHeader>
+                  <CardTitle>Complete Your Order via WhatsApp</CardTitle>
+                  <CardDescription>
+                      As a guest, you can quickly place your order by sending your cart to us on WhatsApp. We'll confirm the details and delivery with you there.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <h3 className="font-semibold mb-2 text-primary-dark dark:text-white">Your Cart Summary</h3>
+                  <div className="space-y-2 border-t border-b dark:border-gray-700 py-4 my-2 max-h-64 overflow-y-auto">
+                      {cartItems.map(item => (
+                          <div key={`${item.product.id}-${item.color}`} className="flex justify-between items-center text-sm">
+                              <p>{item.product.name} {item.color ? `(${item.color})` : ''} <span className="text-gray-500 dark:text-gray-400">x {item.quantity}</span></p>
+                              <p className="font-medium">Ksh {(item.product.price * item.quantity).toLocaleString()}</p>
+                          </div>
+                      ))}
+                  </div>
+                  <div className="flex justify-between font-bold text-lg pt-2 text-primary-dark dark:text-white">
+                      <span>Total</span>
+                      <span>Ksh {totalPrice.toLocaleString()}</span>
+                  </div>
+              </CardContent>
+              <CardFooter className="flex-col gap-4">
+                    <Button onClick={handleGuestCheckout} size="lg" variant="accent" className="w-full">
+                      <Icons.Whatsapp className="mr-2 h-5 w-5" />
+                      Confirm Order on WhatsApp
+                  </Button>
+                    <Link to="/login?redirect=/checkout" className="text-sm text-accent-teal hover:underline">
+                      Login to save your details for next time
+                    </Link>
+              </CardFooter>
+          </Card>
+      </div>
+    );
+  }
 
   const selectedMethodInfo = settings.paymentMethods.find(p => p.id === selectedPaymentMethodId);
 
@@ -109,13 +199,13 @@ const CheckoutPage: React.FC = () => {
             <CardHeader><CardTitle>Shipping Information</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2"><label htmlFor="firstName">First Name</label><Input name="firstName" id="firstName" required /></div>
-                <div className="space-y-2"><label htmlFor="lastName">Last Name</label><Input name="lastName" id="lastName" required /></div>
+                <div className="space-y-2"><label htmlFor="firstName">First Name</label><Input value={firstName} onChange={e => setFirstName(e.target.value)} name="firstName" id="firstName" required /></div>
+                <div className="space-y-2"><label htmlFor="lastName">Last Name</label><Input value={lastName} onChange={e => setLastName(e.target.value)} name="lastName" id="lastName" required /></div>
               </div>
-              <div className="space-y-2"><label htmlFor="address">Address</label><Input name="address" id="address" required /></div>
-              <div className="space-y-2"><label htmlFor="city">City</label><Input name="city" id="city" required /></div>
-              <div className="space-y-2"><label htmlFor="phone">Phone Number</label><Input name="phone" id="phone" type="tel" required /></div>
-              <div className="space-y-2"><label htmlFor="email">Email</label><Input name="email" id="email" type="email" required /></div>
+              <div className="space-y-2"><label htmlFor="address">Address</label><Input value={address} onChange={e => setAddress(e.target.value)} name="address" id="address" required /></div>
+              <div className="space-y-2"><label htmlFor="city">City</label><Input value={city} onChange={e => setCity(e.target.value)} name="city" id="city" required /></div>
+              <div className="space-y-2"><label htmlFor="phone">Phone Number</label><Input value={phone} onChange={e => setPhone(e.target.value)} name="phone" id="phone" type="tel" required /></div>
+              <div className="space-y-2"><label htmlFor="email">Email</label><Input value={email} onChange={e => setEmail(e.target.value)} name="email" id="email" type="email" required /></div>
             </CardContent>
           </Card>
 
@@ -158,12 +248,14 @@ const CheckoutPage: React.FC = () => {
             <CardContent>
               <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
                 {cartItems.map(item => (
-                  <div key={item.product.id} className="flex justify-between items-center">
+                  <div key={`${item.product.id}-${item.color}`} className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
                       <img src={item.product.imageUrl} alt={item.product.name} className="w-16 h-16 rounded-md object-cover" />
                       <div>
                         <p className="font-semibold">{item.product.name}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Qty: {item.quantity}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {item.color ? `${item.color}, ` : ''}Qty: {item.quantity}
+                        </p>
                       </div>
                     </div>
                     <p className="font-medium">Ksh {(item.product.price * item.quantity).toLocaleString()}</p>
